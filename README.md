@@ -20,7 +20,6 @@ The app is designed to run locally or on **Vercel**, and it implements the **OAu
 10. [End-to-end flows](#10-end-to-end-flows)
 11. [Usage examples](#11-usage-examples)
 12. [Deployment notes](#12-deployment-notes)
-13. [Known limitations and configuration gaps](#13-known-limitations-and-configuration-gaps)
 
 ---
 
@@ -348,7 +347,6 @@ Copy `.env.example` to `.env.local` for local development.
 |---|---|
 | `NEXT_PUBLIC_APP_URL` | Public app URL (referenced in `.env.example`; some OAuth routes use `MCP_BASE_URL` instead) |
 
-> **Important:** `MCP_BASE_URL` is used by OAuth routes but is **not listed in `.env.example`**. Set it to your public deployment URL alongside the other Auth0 variables.
 
 ---
 
@@ -557,20 +555,6 @@ Auth0 callback URL must include:
 ```
 https://your-app.vercel.app/oauth/callback
 ```
-
----
-
-## 13. Known limitations and configuration gaps
-
-| Item | Detail |
-|---|---|
-| **Hardcoded issuer URL** | `/.well-known/oauth-authorization-server/route.ts` hardcodes `https://mcp-template-two.vercel.app` instead of reading `MCP_BASE_URL`. Update this for your deployment. |
-| **Token validation** | `withMcpOAuthChallenge` checks Bearer presence only — does not verify JWT signature/audience against Auth0. |
-| **Stub client registration** | `/oauth/register` returns static credentials, not real dynamic registration. |
-| **Single section support** | `createTemplate` only sends the first section to GraphQL. |
-| **In-memory token cache** | Sitecore tokens are cached per server instance — fine for single-instance dev; consider shared cache for multi-instance production. |
-| **`MCP_BASE_URL` missing from `.env.example`** | Must be set manually for OAuth routes to work. |
-| **Callback localhost fix** | `oauth/callback` replaces `https://0.0.0.0:3000` with a specific Sitecore cloud URL — may need adjustment for other environments. |
 
 ---
 
