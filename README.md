@@ -8,7 +8,7 @@ The app is designed to run locally or on **Vercel**, and it implements the **OAu
 
 ## Table of Contents
 
-1. [What problem does this solve?](#1-what-problem-does-this-solve)
+1. [Repo details](#1-repo-details)
 2. [High-level architecture](#2-high-level-architecture)
 3. [Two separate authentication systems](#3-two-separate-authentication-systems)
 4. [Project structure](#4-project-structure)
@@ -17,21 +17,14 @@ The app is designed to run locally or on **Vercel**, and it implements the **OAu
 7. [Core library modules](#7-core-library-modules)
 8. [Environment variables](#8-environment-variables)
 9. [Setup and running locally](#9-setup-and-running-locally)
-10. [End-to-end flows](#10-end-to-end-flows)
-11. [Usage examples](#11-usage-examples)
-12. [Deployment notes](#12-deployment-notes)
+10. [Usage examples](#10-usage-examples)
+11. [Quick reference — all endpoints](#11-quick-reference--all-endpoints)
 
 ---
 
-## 1. What problem does this solve?
+## 1. Repo Details
 
-### Without this repo
 
-- AI assistants have no native way to talk to Sitecore XM Cloud.
-- Sitecore authoring operations (like creating templates) require authenticated GraphQL calls with XM Cloud Automation Client credentials.
-- **Sitecore Agentic Studio** expects MCP servers to support **OAuth 2.0 protected resource discovery** — a standard way for clients to discover how to authenticate before calling `/api/mcp`.
-
-### With this repo
 
 | Capability | How |
 |---|---|
@@ -92,7 +85,6 @@ flowchart TB
 
 ## 3. Two separate authentication systems
 
-This is the most important concept to understand. The repo uses **two independent auth flows** for two different purposes:
 
 ### A. Sitecore XM Cloud auth (server → Sitecore)
 
@@ -226,7 +218,7 @@ They let developers **debug Sitecore connectivity independently** of MCP/OAuth c
 
 | Route | Purpose |
 |---|---|
-| `/` | Simple landing page documenting endpoints, auth flow, and Cursor MCP config snippet. |
+| `/` | Simple landing page documenting endpoints, auth flow. |
 
 ---
 
@@ -402,129 +394,11 @@ curl -X POST http://localhost:3000/api/sitecore/templates \
 
 ---
 
-## 10. End-to-end flows
 
-### Flow A: Cursor / local MCP client (no OAuth)
 
-```mermaid
-sequenceDiagram
-    participant Cursor
-    participant MCP as /api/mcp
-    participant Sitecore as XM Cloud GraphQL
+## 10. Usage examples
 
-    Cursor->>MCP: MCP initialize (may skip auth locally)
-    MCP-->>Cursor: tools/list → createTemplate
-    Cursor->>MCP: tools/call createTemplate
-    MCP->>Sitecore: client_credentials → Bearer token
-    MCP->>Sitecore: createItemTemplate mutation
-    Sitecore-->>MCP: template created
-    MCP-->>Cursor: JSON result
-```
 
-For local dev, you may hit `/api/mcp` directly. In production with OAuth enabled, clients must present a Bearer token.
-
----
-
-### Flow B: Sitecore Agentic Studio (full OAuth)
-
-```mermaid
-sequenceDiagram
-    participant Studio as Agentic Studio
-    participant MCP as /api/mcp
-    participant Meta as /.well-known/*
-    participant OAuth as /oauth/*
-    participant Auth0
-
-    Studio->>MCP: GET /api/mcp (no token)
-    MCP-->>Studio: 401 WWW-Authenticate + resource_metadata URL
-
-    Studio->>Meta: GET /.well-known/oauth-protected-resource/api/mcp
-    Meta-->>Studio: authorization_servers, scopes
-
-    Studio->>Meta: GET /.well-known/oauth-authorization-server
-    Meta-->>Studio: authorize, token, register endpoints
-
-    Studio->>OAuth: POST /oauth/register
-    OAuth-->>Studio: client_id + client_secret (stub)
-
-    Studio->>OAuth: GET /oauth/authorize?code_challenge=...
-    OAuth->>Auth0: redirect to Auth0 login
-    Auth0-->>OAuth: GET /oauth/callback?code=...
-    OAuth-->>Studio: redirect with Auth0 code
-
-    Studio->>OAuth: POST /oauth/token (code)
-    OAuth->>Auth0: exchange code
-    Auth0-->>OAuth: access_token
-    OAuth-->>Studio: tokens
-
-    Studio->>MCP: MCP requests with Bearer token
-    MCP-->>Studio: tool responses
-```
-
----
-
-### Flow C: Template creation (internal)
-
-```mermaid
-sequenceDiagram
-    participant Tool as createTemplate
-    participant Auth as auth.ts
-    participant GQL as graphql.ts
-    participant SC as Sitecore API
-
-    Tool->>Auth: getSitecoreAccessToken()
-    alt token cached
-        Auth-->>Tool: cached token
-    else token expired
-        Auth->>SC: POST client_credentials
-        SC-->>Auth: access_token
-        Auth-->>Tool: new token
-    end
-
-    Tool->>GQL: resolve parent path → GUID
-    GQL->>SC: item query
-    SC-->>GQL: itemId
-
-    Tool->>GQL: createItemTemplate mutation
-    GQL->>SC: mutation
-    SC-->>GQL: templateId, name, fields
-    GQL-->>Tool: result
-```
-
----
-
-## 11. Usage examples
-
-### Cursor MCP configuration
-
-Add to Cursor MCP settings (local, no auth):
-
-```json
-{
-  "mcpServers": {
-    "sitecore": {
-      "url": "http://localhost:3000/api/mcp"
-    }
-  }
-}
-```
-
-For production with OAuth, your client must support Bearer token auth and the MCP OAuth discovery flow.
-
-### Claude Desktop (stdio bridge)
-
-If your client only supports stdio:
-
-```json
-{
-  "mcpServers": {
-    "sitecore": {
-      "command": "npx",
-      "args": ["-y", "mcp-remote", "http://localhost:3000/api/mcp"]
-    }
-  }
-}
-```
 
 ### Sitecore Agentic Studio
 
@@ -538,27 +412,10 @@ Agentic Studio will automatically run the OAuth discovery flow using the `/.well
 
 ---
 
-## 12. Deployment notes
-
-- **Platform:** Vercel (see `.vercel/project.json`).
-- **Function timeout:** `vercel.json` sets `maxDuration: 60` for MCP routes — MCP sessions and GraphQL calls can be long-running.
-- **Runtime:** All API routes use `export const runtime = "nodejs"` (required for MCP and OAuth).
-- **Dynamic:** All routes use `dynamic = "force-dynamic"` — no static caching.
-
-After deploying, set all environment variables in the Vercel dashboard, especially:
-
-- `MCP_BASE_URL=https://your-app.vercel.app`
-- `AUTH0_AUDIENCE=https://your-app.vercel.app`
-
-Auth0 callback URL must include:
-
-```
-https://your-app.vercel.app/oauth/callback
-```
 
 ---
 
-## Quick reference — all endpoints
+## 11. Quick reference — all endpoints
 
 | Endpoint | Method | Category |
 |---|---|---|
@@ -576,8 +433,3 @@ https://your-app.vercel.app/oauth/callback
 | `/oauth/callback` | GET | OAuth Auth0 callback |
 | `/oauth/token` | POST | OAuth token exchange |
 
----
-
-## Summary
-
-This repo is a **Sitecore-aware MCP server** built on Next.js. It lets AI tools create Sitecore data templates by handling XM Cloud authentication server-side, while exposing standard MCP and OAuth discovery endpoints so clients like **Sitecore Agentic Studio** can connect securely. The routes exist because MCP requires specific transport endpoints, OAuth clients require `.well-known` discovery documents, and Sitecore Agentic Studio requires an OAuth proxy layer in front of Auth0 — each route serves a distinct part of that end-to-end integration.
